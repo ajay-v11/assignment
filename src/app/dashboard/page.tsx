@@ -41,6 +41,7 @@ function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<Note | null>(null);
 
   useEffect(() => {
     const fetchUserAndNotes = async () => {
@@ -126,6 +127,41 @@ function Dashboard() {
     }
   }
 
+  async function editNote({
+    id,
+    title,
+    content,
+  }: {
+    id: string;
+    title: string;
+    content: string;
+  }) {
+    try {
+      setLoading(true);
+      const {data, error} = await supabase
+        .from('notes')
+        .update({title, content})
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setNotes(notes.map((note) => (note.id === id ? data : note)));
+        setEditingNote(null);
+        setTitle('');
+        setContent('');
+        setIsDialogOpen(false);
+      }
+    } catch (error) {
+      console.error('Error editing note:', error);
+      alert('Error editing note');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function deleteNote(id: string) {
     try {
       setLoading(true);
@@ -152,7 +188,28 @@ function Dashboard() {
       alert('Please fill in all fields');
       return;
     }
-    addNote({title, content, user_id: userId});
+
+    if (editingNote) {
+      editNote({id: editingNote.id, title, content});
+    } else {
+      addNote({title, content, user_id: userId});
+    }
+  };
+
+  const openEditDialog = (note: Note) => {
+    setEditingNote(note);
+    setTitle(note.title);
+    setContent(note.content);
+    setIsDialogOpen(true);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      setEditingNote(null);
+      setTitle('');
+      setContent('');
+    }
+    setIsDialogOpen(open);
   };
 
   if (loading && notes.length === 0) {
@@ -215,13 +272,15 @@ function Dashboard() {
               </span>
             </div>
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button className='whitespace-nowrap'>+ Add Note</Button>
               </DialogTrigger>
               <DialogContent className='sm:max-w-md'>
                 <DialogHeader>
-                  <DialogTitle>Create New Note</DialogTitle>
+                  <DialogTitle>
+                    {editingNote ? 'Edit Note' : 'Create New Note'}
+                  </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className='space-y-4'>
                   <div className='space-y-2'>
@@ -243,7 +302,11 @@ function Dashboard() {
                     />
                   </div>
                   <Button type='submit' disabled={loading} className='w-full'>
-                    {loading ? 'Saving...' : 'Save Note'}
+                    {loading
+                      ? 'Saving...'
+                      : editingNote
+                      ? 'Update Note'
+                      : 'Save Note'}
                   </Button>
                 </form>
               </DialogContent>
@@ -312,8 +375,8 @@ function Dashboard() {
                   <Button
                     variant='ghost'
                     size='sm'
-                    onClick={() => router.push(`/notes/${note.id}`)}>
-                    View
+                    onClick={() => openEditDialog(note)}>
+                    Edit
                   </Button>
                   <Button
                     variant='destructive'
